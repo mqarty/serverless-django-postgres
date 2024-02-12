@@ -1,0 +1,118 @@
+service: django-neon
+
+frameworkVersion: "3"
+
+configValidationMode: error
+
+useDotenv: true
+
+plugins:
+  - serverless-deployment-bucket
+
+custom:
+  _stage: ${opt:stage, self:provider.stage}
+  deploymentBucket:
+    versioning: true
+    accelerate: true
+    blockPublicAccess: true
+  ssm_prefix:
+    dev: dev
+    prod: prod
+  static-assets:
+    bucket: ${ssm:/django/STATIC_BUCKET}
+
+provider:
+  name: aws
+  deploymentMethod: direct
+  runtime: python3.11
+  stage: ${opt:stage,'dev'}
+  region: us-west-1
+  logRetentionInDays: 1
+  deploymentBucket:
+    name: ${ssm:/SLS_DEPLOYMENT_BUCKET}
+  iam:
+    role:
+      managedPolicies:
+        - "arn:aws:iam::aws:policy/CloudWatchLambdaInsightsExecutionRolePolicy"
+      statements:
+        - Effect: "Allow"
+          Action:
+            - s3:*
+          Resource:
+            - "arn:aws:s3:::*"
+        - Effect: "Allow"
+          Action:
+            - iam:PassRole
+            - iam:AssumeRole
+          Resource: "*"
+  tracing:
+    lambda: true
+  logs:
+    websocket:
+      level: INFO
+
+  # Environment Variables
+  environment:
+    ENV: ${self:custom._stage}
+    LOGLEVEL: debug
+    LAMBDA_INSIGHTS_LOG_LEVEL: info
+
+    # STATIC ASSETS
+    AWS_STATIC_STORAGE_BUCKET_NAME: ${self:custom.static-assets.bucket}
+
+    # NEON branch specific
+    POSTGRES_HOST: ${ssm:/${self:custom.ssm_prefix.${self:custom._stage}}/neon/POSTGRES_HOST}
+    POSTGRES_DB: ${ssm:/${self:custom.ssm_prefix.${self:custom._stage}}/neon/POSTGRES_DB}
+    POSTGRES_PASSWORD: ${ssm:/${self:custom.ssm_prefix.${self:custom._stage}}/neon/POSTGRES_PASSWORD}
+    POSTGRES_USER: ${ssm:/${self:custom.ssm_prefix.${self:custom._stage}}/neon/POSTGRES_USER}
+
+functions:
+  api:
+    image: "${aws:accountId}.dkr.ecr.${self:provider.region}.amazonaws.com/${env:AWS_ECR_REPO_NAME}:latest"
+    environment:
+      SERVICE: django-neon-${self:custom._stage}-api
+      VERSION: ${env:CIRCLE_SHA1, 'none'}
+    url: true
+    tags:
+      env: ${self:custom._stage}
+      service: django-neon-${self:custom._stage}-api
+      version: ${env:CIRCLE_SHA1, 'none'}
+    name: django-neon-${self:custom._stage}-api
+    description: The main Django handler for requests and commands
+    memorySize: 512
+    timeout: 15 # To allow for Collectstatic to complete (Default is 6)
+    tracing: Active
+    logRetentionInDays: 1 # Default is forever
+
+resources:
+  Resources:
+    DjangoAssets:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.static-assets.bucket}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          IgnorePublicAcls: false
+          BlockPublicPolicy: false
+          RestrictPublicBuckets: false
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - HEAD
+                - POST
+              AllowedOrigins:
+                - "*"
+    PolicyDjangoAssets:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: ${self:custom.static-assets.bucket}
+        PolicyDocument:
+          Statement:
+            - Action: s3:GetObject
+              Effect: Allow
+              Resource: arn:aws:s3:::${self:custom.static-assets.bucket}/*
+              Principal: "*"
+              Sid: PublicReadGetObject

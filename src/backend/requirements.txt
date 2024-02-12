@@ -1,0 +1,7 @@
+awslambdaric == 2.0.8
+django<6
+django-storages[s3]==1.14.2
+django-unfold==0.20.3
+environs==10.3.0
+psycopg2-binary==2.9.9
+serverless-wsgi==3.0.3
