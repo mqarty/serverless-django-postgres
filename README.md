@@ -137,7 +137,7 @@ The remaining are for access to Neon Postgres.
 
    Note: AWS_ECR_REPO_NAME is used in serverless.yml for the image name
 
-   https://github.com/mqarty/serverless-django-postgres/blob/6a357023a77ce7ddff71a8600e1be2cc39d872e8/src/backend/serverless.yml#L69-L72
+   https://github.com/mqarty/serverless-django-postgres/blob/73f6c1f9e69c2bacf331b9fbd0792894f0cd0d03/src/backend/serverless.yml#L69-L72
 
 1. Copy the endpoint, a.k.a function url, from the output e.g. https://blahblahblah.lambda-url.us-west-1.on.aws/.
 
